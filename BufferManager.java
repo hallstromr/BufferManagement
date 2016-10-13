@@ -7,8 +7,7 @@ import java.io.*;
  */
 public class BufferManager
 {
-    public static class PageNotPinnedException
-        extends RuntimeException {};
+    public static class PageNotPinnedException extends RuntimeException {};
     public static class PagePinnedException extends RuntimeException {};
 
     /**
@@ -52,6 +51,7 @@ public class BufferManager
      */
     public int poolSize()
     {
+        return -1;
     }
 
     /**
@@ -72,6 +72,7 @@ public class BufferManager
     public Page pinPage(int pinPageId, String fileName, boolean emptyPage)
         throws IOException
     {
+        return null;
     }
 
     /**
@@ -111,6 +112,7 @@ public class BufferManager
     public Pair<Integer,Page> newPage(int numPages, String fileName)
         throws IOException
     {
+        return null;
     }
 
     /**
@@ -164,5 +166,6 @@ public class BufferManager
     */
     public int findFrame(int pageId, String fileName)
     {
+        return -1;
     }
 }
