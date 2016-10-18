@@ -96,37 +96,43 @@ public class BufferManager
 	}
 
 	int count = 0;
-	int index = 0;
 	FrameDescriptor curFrame;
 	while(count < 2*this.bufferPool.length) {
-	    index = clockHand + count%(this.bufferPool.length - 1);
-	    curFrame = this.frameTable[index];
-	    
+	    curFrame = this.frameTable[clockHand];
+
 	    if(curFrame.pinCount < 1 && curFrame.reference == false) {
 		//replace
+
 		Page page = new Page();
-		file.readPage(curFrame.pageNum, page);
+		
+		if(!emptyPage) {
+		    file.readPage(curFrame.pageNum, page);
+		}
 
 		if(curFrame.dirty == true) {
 		    this.flushPage(curFrame.pageNum, fileName);
 		}
-		int replaceIndex = hashMap.get(curFrame.pageNum);
+		int replaceIndex = clockHand;
 
 		
 		file.readPage(pinPageId, page);
 		this.bufferPool[replaceIndex] = page;
 		this.frameTable[replaceIndex].pageNum = pinPageId;
 		this.frameTable[replaceIndex].fileName = fileName;
-		this.frameTable[replaceIndex].pinCount += 1;
+		this.frameTable[replaceIndex].pinCount = 1;
 		hashMap.put(pinPageId, replaceIndex);
+		count++;
+		clockHand++;
+		this.clockHand = clockHand%(this.bufferPool.length);
 		return page;
 		
-	    } else if (curFrame.reference == true) {
-		this.frameTable[index].reference = false;
+	    } else if (curFrame.pinCount < 1 && curFrame.reference == true) {
+		this.frameTable[clockHand].reference = false;
 	    }
 	    count++;
+	    clockHand++;
+	    clockHand = clockHand%(this.bufferPool.length);
 	}
-	clockHand = count%(this.bufferPool.length - 1);
 	
         return null;
     }
@@ -269,6 +275,10 @@ public class BufferManager
     */
     public int findFrame(int pageId, String fileName)
     {
+	FrameDescriptor curFrame = frameTable[hashMap.get(pageId)];
+	if(curFrame.pageNum == pageId && curFrame.fileName == fileName) {
+	    return hashMap.get(pageId);
+	}
         return -1;
     }
 }
