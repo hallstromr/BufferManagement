@@ -59,6 +59,7 @@ public class BMTester
                                                   "2nd time");
                 String readBack = new String(page.data);
                 String orig = "This is test 1 for page " + i;
+		System.out.println("readback: " + readBack);
                 System.out.println("PAGE[" + i + "]: " +
                                  readBack.substring(0,orig.length()));
                 if (!readBack.regionMatches(0,orig,0,orig.length()))

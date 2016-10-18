@@ -1,4 +1,5 @@
 import java.io.*;
+import java.util.*;
 
 /**
  * Buffer manager. Manages a memory-based buffer pool of pages.
@@ -21,6 +22,7 @@ public class BufferManager
         private String fileName;
         private int pinCount;
         private boolean dirty;
+	private boolean reference;
         
         public FrameDescriptor()
         {
@@ -28,6 +30,7 @@ public class BufferManager
             pinCount = 0;
             fileName = null;
             dirty = false;
+	    reference = false;
         }
 
     }
@@ -36,6 +39,8 @@ public class BufferManager
     // probably need more.
     private Page[] bufferPool;
     private FrameDescriptor[] frameTable;
+    private Map<Integer, Integer> hashMap;
+    private int clockHand;
 
     /**
      * Creates a buffer manager with the specified size.
@@ -43,6 +48,15 @@ public class BufferManager
      */
     public BufferManager(int poolSize)
     {
+	this.bufferPool = new Page[poolSize];
+	this.frameTable = new FrameDescriptor[poolSize];
+	for(int i = 0; i < poolSize; i++) {
+	    this.bufferPool[i] = new Page();
+	    this.frameTable[i] = new FrameDescriptor();
+	}
+	
+	this.hashMap = new HashMap<Integer, Integer>();
+	this.clockHand = 0;
     }
 
     /**
@@ -51,7 +65,7 @@ public class BufferManager
      */
     public int poolSize()
     {
-        return -1;
+        return this.bufferPool.length;
     }
 
     /**
@@ -72,6 +86,48 @@ public class BufferManager
     public Page pinPage(int pinPageId, String fileName, boolean emptyPage)
         throws IOException
     {
+	DBFile file = new DBFile(fileName);
+	Page curPage = new Page();
+	file.readPage(pinPageId, curPage);
+	
+	if(hashMap.get(curPage) != null) {
+	    this.frameTable[hashMap.get(pinPageId)].pinCount += 1;
+	    return this.bufferPool[hashMap.get(pinPageId)];
+	}
+
+	int count = 0;
+	int index = 0;
+	FrameDescriptor curFrame;
+	while(count < 2*this.bufferPool.length) {
+	    index = clockHand + count%(this.bufferPool.length - 1);
+	    curFrame = this.frameTable[index];
+	    
+	    if(curFrame.pinCount < 1 && curFrame.reference == false) {
+		//replace
+		Page page = new Page();
+		file.readPage(curFrame.pageNum, page);
+
+		if(curFrame.dirty == true) {
+		    this.flushPage(curFrame.pageNum, fileName);
+		}
+		int replaceIndex = hashMap.get(curFrame.pageNum);
+
+		
+		file.readPage(pinPageId, page);
+		this.bufferPool[replaceIndex] = page;
+		this.frameTable[replaceIndex].pageNum = pinPageId;
+		this.frameTable[replaceIndex].fileName = fileName;
+		this.frameTable[replaceIndex].pinCount += 1;
+		hashMap.put(pinPageId, replaceIndex);
+		return page;
+		
+	    } else if (curFrame.reference == true) {
+		this.frameTable[index].reference = false;
+	    }
+	    count++;
+	}
+	clockHand = count%(this.bufferPool.length - 1);
+	
         return null;
     }
 
@@ -91,6 +147,17 @@ public class BufferManager
     public void unpinPage(int unpinPageId, String fileName, boolean dirty)
         throws IOException
     {
+	DBFile file = new DBFile(fileName);
+	int index = hashMap.get(unpinPageId);
+	
+	if(dirty == true) {
+	    this.flushPage(unpinPageId, fileName);
+	}
+	this.frameTable[index].pinCount -= 1;
+	this.frameTable[index].reference = true;
+	
+	
+	
     }
 
 
@@ -112,7 +179,41 @@ public class BufferManager
     public Pair<Integer,Page> newPage(int numPages, String fileName)
         throws IOException
     {
-        return null;
+	DBFile file = new DBFile(fileName);
+
+	int firstPageNum = file.allocatePages(numPages);
+	int lastAllocatedPageNum = firstPageNum;
+
+	Page pinnable = new Page();
+	Page curPage = new Page();
+
+	//always try to pin first page
+	if(this.frameTable[0].pageNum == INVALID_PAGE) {
+	    file.readPage(lastAllocatedPageNum, curPage);
+	    this.bufferPool[0] = curPage;
+	    this.frameTable[0].fileName = fileName;
+	    this.frameTable[0].pageNum = lastAllocatedPageNum;
+	    hashMap.put(lastAllocatedPageNum, 0);
+
+	    pinnable = this.pinPage(lastAllocatedPageNum, fileName, false);
+	    
+	    if(pinnable == null) {
+		return null;
+	    }
+	}
+	lastAllocatedPageNum++;
+	
+	for(int frameDesNum = 0; frameDesNum < numPages; frameDesNum++) {
+	    if(this.frameTable[frameDesNum%this.frameTable.length].pageNum == INVALID_PAGE) {
+		file.readPage(lastAllocatedPageNum, curPage);
+		this.bufferPool[frameDesNum%this.frameTable.length] = curPage;
+		this.frameTable[frameDesNum%this.frameTable.length].fileName = fileName;
+		this.frameTable[frameDesNum%this.frameTable.length].pageNum = lastAllocatedPageNum;
+		hashMap.put(lastAllocatedPageNum, frameDesNum%this.frameTable.length);
+		lastAllocatedPageNum++;
+	    }
+	}
+	return new Pair<Integer, Page>(firstPageNum, pinnable);
     }
 
     /**
@@ -142,6 +243,8 @@ public class BufferManager
      */
     public void flushPage(int pageId, String fileName) throws IOException
     {
+	DBFile file = new DBFile(fileName);
+	file.writePage(pageId, this.bufferPool[hashMap.get(pageId)]);
     }
 
     /**
