@@ -110,7 +110,7 @@ public class BufferManager
 		}
 
 		if(curFrame.dirty == true) {
-		    this.flushPage(curFrame.pageNum, fileName);
+		    this.flushPage(curFrame.pageNum, curFrame.fileName);
 		}
 		int replaceIndex = clockHand;
 
@@ -120,6 +120,8 @@ public class BufferManager
 		this.frameTable[replaceIndex].pageNum = pinPageId;
 		this.frameTable[replaceIndex].fileName = fileName;
 		this.frameTable[replaceIndex].pinCount = 1;
+		this.frameTable[replaceIndex].dirty = false;
+		this.frameTable[replaceIndex].reference = false;
 		hashMap.put(pinPageId, replaceIndex);
 		count++;
 		clockHand++;
@@ -157,6 +159,7 @@ public class BufferManager
 	int index = hashMap.get(unpinPageId);
 	
 	if(dirty == true) {
+	    this.frameTable[hashMap.get(unpinPageId)].dirty = true;
 	    this.flushPage(unpinPageId, fileName);
 	}
 	this.frameTable[index].pinCount -= 1;
@@ -233,6 +236,16 @@ public class BufferManager
      */
     public void freePage(int pageId, String fileName) throws IOException
     {
+	DBFile file;
+	for(int index = 0; index < this.frameTable.length; index++) {
+	    if(frameTable[index].pageNum == pageId && frameTable[index].fileName == fileName) {
+		if(frameTable[index].pinCount > 0) {
+		    throw new PagePinnedException();
+		}
+		file = new DBFile(fileName);
+		file.deallocatePages(pageId, pageId+1);
+	    }
+	}
     }
 
     /**
@@ -249,8 +262,11 @@ public class BufferManager
      */
     public void flushPage(int pageId, String fileName) throws IOException
     {
-	DBFile file = new DBFile(fileName);
-	file.writePage(pageId, this.bufferPool[hashMap.get(pageId)]);
+	if(this.frameTable[hashMap.get(pageId)].dirty) {
+	    DBFile file = new DBFile(fileName);
+	    file.writePage(pageId, this.bufferPool[hashMap.get(pageId)]);
+	    this.frameTable[hashMap.get(pageId)].dirty = false;
+	}
     }
 
     /**
@@ -262,6 +278,13 @@ public class BufferManager
      */
     public void flushAllPages() throws IOException
     {
+	DBFile file;
+	for(int index = 0; index < frameTable.length; index++) {
+	    if(frameTable[index].dirty) {
+		file = new DBFile(frameTable[index].fileName);
+		file.writePage(frameTable[index].pageNum, this.bufferPool[index]);
+	    }
+	}
     }
         
     /**
