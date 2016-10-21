@@ -39,7 +39,7 @@ public class BufferManager
     // probably need more.
     private Page[] bufferPool;
     private FrameDescriptor[] frameTable;
-    private Map<Integer, Integer> hashMap;
+    private Map<Pair, Integer> hashMap;
     private int clockHand;
 
     /**
@@ -55,7 +55,7 @@ public class BufferManager
 	    this.frameTable[i] = new FrameDescriptor();
 	}
 	
-	this.hashMap = new HashMap<Integer, Integer>();
+	this.hashMap = new HashMap<Pair, Integer>();
 	this.clockHand = 0;
     }
 
@@ -122,7 +122,7 @@ public class BufferManager
 		this.frameTable[replaceIndex].pinCount = 1;
 		this.frameTable[replaceIndex].dirty = false;
 		this.frameTable[replaceIndex].reference = false;
-		hashMap.put(pinPageId, replaceIndex);
+		hashMap.put(new Pair<Integer, String>(pinPageId,fileName), replaceIndex);
 		count++;
 		clockHand++;
 		this.clockHand = clockHand%(this.bufferPool.length);
@@ -156,10 +156,10 @@ public class BufferManager
         throws IOException
     {
 	DBFile file = new DBFile(fileName);
-	int index = hashMap.get(unpinPageId);
+	int index = hashMap.get(new Pair<Integer, String>(unpinPageId,fileName));
 	
 	if(dirty == true) {
-	    this.frameTable[hashMap.get(unpinPageId)].dirty = true;
+	    this.frameTable[hashMap.get(new Pair<Integer, String>(unpinPageId,fileName))].dirty = true;
 	    this.flushPage(unpinPageId, fileName);
 	}
 	this.frameTable[index].pinCount -= 1;
@@ -202,7 +202,7 @@ public class BufferManager
 	    this.bufferPool[0] = curPage;
 	    this.frameTable[0].fileName = fileName;
 	    this.frameTable[0].pageNum = lastAllocatedPageNum;
-	    hashMap.put(lastAllocatedPageNum, 0);
+	    hashMap.put(new Pair<Integer, String>(lastAllocatedPageNum,fileName), 0);
 
 	    pinnable = this.pinPage(lastAllocatedPageNum, fileName, false);
 	    
@@ -218,7 +218,7 @@ public class BufferManager
 		this.bufferPool[frameDesNum%this.frameTable.length] = curPage;
 		this.frameTable[frameDesNum%this.frameTable.length].fileName = fileName;
 		this.frameTable[frameDesNum%this.frameTable.length].pageNum = lastAllocatedPageNum;
-		hashMap.put(lastAllocatedPageNum, frameDesNum%this.frameTable.length);
+		hashMap.put(new Pair<Integer, String>(lastAllocatedPageNum,fileName), frameDesNum%this.frameTable.length);
 		lastAllocatedPageNum++;
 	    }
 	}
@@ -262,10 +262,10 @@ public class BufferManager
      */
     public void flushPage(int pageId, String fileName) throws IOException
     {
-	if(this.frameTable[hashMap.get(pageId)].dirty) {
+	if(this.frameTable[hashMap.get(new Pair<Integer, String>(pageId, fileName))].dirty) {
 	    DBFile file = new DBFile(fileName);
-	    file.writePage(pageId, this.bufferPool[hashMap.get(pageId)]);
-	    this.frameTable[hashMap.get(pageId)].dirty = false;
+	    file.writePage(pageId, this.bufferPool[hashMap.get(new Pair<Integer, String>(pageId, fileName))]);
+	    this.frameTable[hashMap.get(new Pair<Integer, String>(pageId, fileName))].dirty = false;
 	}
     }
 
@@ -298,9 +298,9 @@ public class BufferManager
     */
     public int findFrame(int pageId, String fileName)
     {
-	FrameDescriptor curFrame = frameTable[hashMap.get(pageId)];
+	FrameDescriptor curFrame = frameTable[hashMap.get(new Pair<Integer, String>(pageId, fileName))];
 	if(curFrame.pageNum == pageId && curFrame.fileName == fileName) {
-	    return hashMap.get(pageId);
+	    return hashMap.get(new Pair<Integer, String>(pageId, fileName));
 	}
         return -1;
     }
