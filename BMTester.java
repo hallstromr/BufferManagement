@@ -160,6 +160,63 @@ public class BMTester
         }
     }
 
+    public static class Test3 implements Testable
+    {
+        public void test(BufferManager bufMgr, String filename)
+            throws Exception
+        {
+            // Allocate some pages
+            bufMgr.newPage(20,filename);
+	    
+            System.out.println("------- Test 3 -------");
+            for (int i=0; i < 20; i++)
+            {
+                Page page = bufMgr.pinPage(i,filename,false);
+                if (page == null)
+                    throw new TestFailedException("Unable to pin page " +
+                                                  "1st time");
+                System.out.println("after pinPage " + i);
+                byte[] data = ("This is test 1 for page " + i).getBytes();
+                System.arraycopy(data,0,page.data,0,data.length);
+		bufMgr.unpinPage(i,filename,true);
+            }
+
+	    if(bufMgr.pinPage(19, filename, false) == null) {
+		System.out.println("tried to pin when bufferpool is full.");
+	    }
+
+	    //flush all
+	    bufMgr.flushAllPages();
+
+	    Page page = new Page();
+	    DBFile file = new DBFile(filename);
+	    
+            for (int i=0; i < 20; i++)
+            {
+		file.readPage(i, page);
+                String readBack = new String(page.data);
+                String orig = "This is test 1 for page " + i;
+		System.out.println("readback: " + readBack);
+                System.out.println("PAGE[" + i + "]: " +
+                                 readBack.substring(0,orig.length()));
+                if (!readBack.regionMatches(0,orig,0,orig.length()))
+                    throw new TestFailedException("Page content incorrect");
+            }
+	    //should throw page pinned exception.
+	    //bufMgr.freePage(0, filename);
+
+	    //bufMgr.unpinPage(0, filename, false);
+	    
+	    //run without error
+	    bufMgr.freePage(2,filename);
+	    
+	    //should throw page not pinned execption.
+	    //bufMgr.unpinPage(50, filename, true);
+
+            System.out.println();
+        }
+    }
+
 
     public static final String FILENAME = "__testing";
     public static final int NUMBUF = 20;
@@ -196,6 +253,7 @@ public class BMTester
         // Run the tests.
         runTest(new Test1());
         runTest(new Test2());
+	runTest(new Test3());
         
         // Clean up
         DBFile.erase(FILENAME);

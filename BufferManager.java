@@ -105,17 +105,19 @@ public class BufferManager
 
 		Page page = new Page();
 		
-		if(!emptyPage) {
-		    file.readPage(curFrame.pageNum, page);
-		}
+		file.readPage(curFrame.pageNum, page);
 
 		if(curFrame.dirty == true) {
 		    this.flushPage(curFrame.pageNum, curFrame.fileName);
 		}
 		int replaceIndex = clockHand;
 
-		
-		file.readPage(pinPageId, page);
+		if(!emptyPage) {
+		    file.readPage(pinPageId, page);
+		} else {
+		    page = new Page();
+		}
+
 		this.bufferPool[replaceIndex] = page;
 		this.frameTable[replaceIndex].pageNum = pinPageId;
 		this.frameTable[replaceIndex].fileName = fileName;
@@ -155,17 +157,23 @@ public class BufferManager
     public void unpinPage(int unpinPageId, String fileName, boolean dirty)
         throws IOException
     {
-	DBFile file = new DBFile(fileName);
-	int index = hashMap.get(new Pair<Integer, String>(unpinPageId,fileName));
 	
+	Integer index = hashMap.get(new Pair<Integer, String>(unpinPageId,fileName));
+	if(index == null) {
+	    throw new PageNotPinnedException();
+	} else if(unpinPageId != frameTable[index].pageNum || fileName != frameTable[index].fileName || this.frameTable[index].pinCount < 1) {
+	    throw new PageNotPinnedException();
+	}
+	
+	DBFile file = new DBFile(fileName);
 	if(dirty == true) {
 	    this.frameTable[hashMap.get(new Pair<Integer, String>(unpinPageId,fileName))].dirty = true;
-	    this.flushPage(unpinPageId, fileName);
 	}
 	this.frameTable[index].pinCount -= 1;
-	this.frameTable[index].reference = true;
-	
-	
+
+	if(this.frameTable[index].pinCount < 1) {
+	    this.frameTable[index].reference = true;
+	}
 	
     }
 
@@ -279,10 +287,14 @@ public class BufferManager
     public void flushAllPages() throws IOException
     {
 	DBFile file;
+	
 	for(int index = 0; index < frameTable.length; index++) {
+	    System.out.println("flush all: " + frameTable[index].dirty + " " + index);
 	    if(frameTable[index].dirty) {
+		System.out.println("flush all dirty");
 		file = new DBFile(frameTable[index].fileName);
 		file.writePage(frameTable[index].pageNum, this.bufferPool[index]);
+		this.frameTable[index].dirty = false;
 	    }
 	}
     }
@@ -299,9 +311,10 @@ public class BufferManager
     public int findFrame(int pageId, String fileName)
     {
 	FrameDescriptor curFrame = frameTable[hashMap.get(new Pair<Integer, String>(pageId, fileName))];
-	if(curFrame.pageNum == pageId && curFrame.fileName == fileName) {
-	    return hashMap.get(new Pair<Integer, String>(pageId, fileName));
+	Integer frameIndex = hashMap.get(new Pair<Integer, String>(pageId, fileName));
+	if(frameIndex == null) {
+	    return -1;
 	}
-        return -1;
+        return frameIndex;
     }
 }
